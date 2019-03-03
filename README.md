@@ -31,7 +31,7 @@ Usage of ./bin/telemetry_collector:
     	The server port (default 57400)
   -proto string
     	proto file to use for decode (default "telemetry.proto")
-  -raw_decode
+  -decode_raw
     	Use protoc --decode_raw
  $
  ```
