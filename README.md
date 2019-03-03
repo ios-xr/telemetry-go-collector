@@ -11,13 +11,15 @@ Assuming "Go" is already installed, following intructions are for getting collec
 `go get -d github.com/ios-xr/telemetry-go-collector`
 
 alternatly, use git clone to get the collector to $GOPATH/src directory
+
 `git clone github.com/ios-xr/telemetry-go-collector $GOPATH/src`
+
 If git clone is used, change the import of mdt_grpc_dialout in telemetry_dialout_collector.go to make sure, path is correct relative to $GOPATH/src
 
 ##### Build
 `go build -o bin/telemetry_collector src/github.com/ios-xr/telemetry-go-collector/telemetry_dialout_collector/telemetry_dialout_collector.go`
 
-prebuilt binary is can be used from bin/telemetry_dialout_collector on linux.
+prebuilt binary can be used from bin/telemetry_dialout_collector on linux.
 
 ##### Run
 ```
