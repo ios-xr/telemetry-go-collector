@@ -16,7 +16,7 @@ import (
         "path/filepath"
         "google.golang.org/grpc"
         "google.golang.org/grpc/peer"
-        "github.com/adithyasesani/test-collector/mdt_grpc_dialout"
+        "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialout"
 )
 
 var (
