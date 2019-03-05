@@ -77,8 +77,8 @@ Usage of ./bin/telemetry_dialin_collector:
  $
 ```
 
-###Example usage:
-####Dialout Server:
+### Example usage:
+#### Dialout Server:
 ```
   // default encoding, expects json message to be streamed
   telemetry_dialout_collector -port 57500
@@ -87,15 +87,15 @@ Usage of ./bin/telemetry_dialin_collector:
   // decode gpb message with proto
   telemetry_dialout_collector -port 57500 -encoding gpb -decode_raw
 ```
-####Dialin client:
+#### Dialin client:
 ```
   telemetry_dialin_collector -server "<router-ip-address>:<grpc-port>" -subscription <subscription-name> -oper subscribe -username <username> -password <passwd> -encoding <> -qos <dscp>
-######Subscribe to a subscription configured on the router
+###### Subscribe to a subscription configured on the router
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -proto cdp_neighbor_compact.proto 
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -decode_raw
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab
 ```
-######Get Proto for an oper model (Supported from 6.5.1 IOS XR release)
+###### Get Proto for an oper model (Supported from 6.5.1 IOS XR release)
 ```
   telemetry_dialin_collector -server "192.168.122.157:57500" -oper get-proto -username root -password lab -yang_path Cisco-IOS-XR-cdp-oper:cdp/nodes/node/neighbors/details/detail
   telemetry_dialin_collector -server "192.168.122.157:57500" -oper get-proto -username root -password lab -yang_path Cisco-IOS-XR-cdp-oper:cdp -out cdp.proto
