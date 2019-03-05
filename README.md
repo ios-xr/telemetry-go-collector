@@ -90,7 +90,9 @@ Usage of ./bin/telemetry_dialin_collector:
 #### Dialin client:
 ```
   telemetry_dialin_collector -server "<router-ip-address>:<grpc-port>" -subscription <subscription-name> -oper subscribe -username <username> -password <passwd> -encoding <> -qos <dscp>
+```
 ###### Subscribe to a subscription configured on the router
+```
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -proto cdp_neighbor_compact.proto 
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -decode_raw
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab
