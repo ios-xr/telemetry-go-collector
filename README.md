@@ -10,7 +10,7 @@ Note:
 Dialout collector supports grpc, tcp and udp transports
 Dialin Collector supports subscribe and get-proto RPCs to IOSXR device
 
-##### Install instructions:
+#### Install instructions:
 `go get -d github.com/ios-xr/telemetry-go-collector`
 
 alternately, use git clone to get the collector to $GOPATH/src directory
@@ -19,11 +19,12 @@ alternately, use git clone to get the collector to $GOPATH/src directory
 
 If git clone is used, change the import of mdt_grpc_dialout in telemetry_dialout_collector.go to make sure, path is correct relative to $GOPATH/src
 
-##### Requirements
+#### Requirements
 Need following to be available to be able to build the collectors, binaries can be used as is on linux
 * go
 * protoc
 * grpc
+
 Install instructions are present in [Dialout-collector-howto.md](Dialout-collector-howto.md)
 
 ### MDT Dialout Collector:
