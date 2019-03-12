@@ -5,8 +5,6 @@ import (
        "encoding/json"
        "flag"
        "fmt"
-       "golang.org/x/net/context"
-       "google.golang.org/grpc"
        "io"
        "io/ioutil"
        "log"
@@ -15,9 +13,16 @@ import (
        "os/signal"
        "strings"
        "path/filepath"
+
+       "golang.org/x/net/context"
+       "google.golang.org/grpc"
+        "github.com/golang/protobuf/proto"
+
        MdtDialin "mdt_grpc_dialin"
+       "telemetry"
 )
 
+const tmpFileName                = "telemetry-msg-*.dat"
 const ProtocRawDecode string     = "protoc --decode_raw "
 const ProtocCommandString string = "protoc --decode=Telemetry "
 
@@ -29,9 +34,20 @@ var telemetryEncoding = map[string]int64{
     "json":                4,
 }
 
+var usage = func() {
+    fmt.Fprintf(os.Stderr, "Usage: %s [options]\n", os.Args[0])
+
+    flag.PrintDefaults()
+    fmt.Fprintf(os.Stderr, "Examples:\n")
+    fmt.Fprintf(os.Stderr, "Subscribe: %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Get proto for yang path:   %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode:   %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode without proto: %s %s -server <ip:port> -subscription <> -encoding gpb -decode_raw\n", os.Args[0])
+}
+
 var (
-        serverAddr   = flag.String("server", "127.0.0.1:57400", "The server address, host:port")
-        operation    = flag.String("oper", "", "Operation: subscribe, get-proto")
+        serverAddr   = flag.String("server", "", "The server address, host:port")
+        operation    = flag.String("oper", "subscribe", "Operation: subscribe, get-proto")
         subIds       = flag.String("subscription", "", "Subscription name to subscribe to")
         encoding     = flag.String("encoding", "json",
                                    "encoding to use, Options: json,self-describing-gpb,gpb")
@@ -42,30 +58,90 @@ var (
                                    "Username for the client connection")
         password     = flag.String("password", "",
                                    "Password for the client connection")
-        raw_decode   = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
-        protoFile    = flag.String("proto", "telemetry.proto", "proto file to use for decode")
+        decode_raw   = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
+        protoFile    = flag.String("proto", "", "proto file to use for decode")
         dontClean    = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
 )
 
-type passCredential int
+func main() {
+     flag.Usage = usage
+     flag.Parse()
+     var opts []grpc.DialOption
+     var cred passCredential
 
-func (passCredential) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
-     return map[string]string{
-                "username": *username,
-                "password": *password,
-            }, nil
+     if !*dontClean {
+           // install signal handler for cleaning up tmp files
+           sigs := make(chan os.Signal, 1)
+           signal.Notify(sigs, os.Interrupt)
+           go func() {
+              <- sigs
+              //cleanup()
+              files, _ := filepath.Glob("/tmp/" + tmpFileName)
+              for _, f := range files {
+                  if err := os.Remove(f); err != nil {
+                     fmt.Printf("Failed to remove tmp file %s\n",f)
+                  }
+              }
+              os.Exit(0)
+           }()
+     }
+
+     // TODO: add TLS support
+     opts = append(opts, grpc.WithInsecure())
+     opts = append(opts, grpc.WithPerRPCCredentials(cred))
+
+     conn, err := grpc.Dial(*serverAddr, opts...)
+     if err != nil {
+        log.Fatalf("fail to dial: %v", err)
+     }
+     defer conn.Close()
+
+     configOperClient := MdtDialin.NewGRPCConfigOperClient(conn)
+
+     reqId := int64(os.Getpid())
+     telemetryEncode, ok := telemetryEncoding[*encoding]
+     if !ok {
+        log.Fatalf("Not supported encoding: %s", *encoding)
+     }
+     telemetrySubIdstr := *subIds
+     telemetryQos := (uint32)(*qos)
+
+     if strings.EqualFold(*operation, "subscribe") {
+        subidstrings := strings.Split(telemetrySubIdstr, "#")
+
+        var marking *MdtDialin.QOSMarking
+        if telemetryQos != NotConfigured {
+           marking = &MdtDialin.QOSMarking{Marking: telemetryQos}
+        }
+
+        createSubsArgs := MdtDialin.CreateSubsArgs{
+                          ReqId:         reqId,
+                          Encode:        telemetryEncode,
+                          Subscriptions: subidstrings,
+                          Qos:           marking}
+
+        mdtSubscribe(configOperClient, &createSubsArgs)
+     } else if strings.EqualFold(*operation, "get-proto") {
+        if len(*yangPath) > 0 {
+           getProtoArgs := MdtDialin.GetProtoFileArgs{ReqId: reqId, YangPath: *yangPath}
+           mdtGetProto(configOperClient, &getProtoArgs)
+        } else {
+           fmt.Println("No yang path specified!")
+        }
+     } else {
+        fmt.Println("Unsupported operation!")
+     }
 }
 
-func (passCredential) RequireTransportSecurity() bool {
-     return false
-}
-
+// createSubs rpc to subscribe
 func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateSubsArgs) {
      var oFile *os.File
+     var tmpfile *os.File
      var commandString string
      var prettyJSON bytes.Buffer
+     var err error
 
-     fmt.Printf("mdtSubscribe: Dialin ReqId %d sub_idstr %s\n", args.ReqId, args.Subidstr)
+     fmt.Printf("mdtSubscribe: Dialin %d subscription %s\n", args.ReqId, args.Subscriptions)
 
      oFile = os.Stdout
      if len(*outFile) != 0 {
@@ -73,16 +149,19 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
         defer oFile.Close()
      }
 
-     tmpfile, err := ioutil.TempFile("", "telemetry-msg-")
-     if (err != nil) {
-        log.Fatal("Failed to create tmp file for writing", err)
-     }
-     defer os.Remove(tmpfile.Name())
+     if *decode_raw || (len(*protoFile) != 0) {
+         tmpfile, err = ioutil.TempFile("", tmpFileName)
+         if (err != nil) {
+             log.Fatal("Failed to create tmp file for writing", err)
+         }
+         defer os.Remove(tmpfile.Name())
+         defer tmpfile.Close()
 
-     if *raw_decode {
-        commandString = ProtocRawDecode + "<" + tmpfile.Name()
-     } else {
-        commandString = ProtocCommandString + *protoFile + "<" + tmpfile.Name()
+         if *decode_raw {
+             commandString = ProtocRawDecode + "<" + tmpfile.Name()
+         } else {
+             commandString = ProtocCommandString + *protoFile + "<" + tmpfile.Name()
+         }
      }
 
      stream, err := client.CreateSubs(context.Background(), args)
@@ -118,28 +197,36 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
                 }
                 continue
              }
-             /* Write to tmp file and run protoc command to decode */
-             _, err = tmpfile.Write(reply.Data)
-             out, err := exec.Command("sh", "-c", commandString).Output()
-             if err != nil {
-                fmt.Println("---Decode error---\n")
+             if *decode_raw || (len(*protoFile) != 0) {
+                 // use protoc to decode
+                 /* Write to tmp file and run protoc command to decode */
+                 _, err = tmpfile.Write(reply.Data)
+                 out, err := exec.Command("sh", "-c", commandString).CombinedOutput()
+                 if err != nil {
+                     fmt.Println("Protoc error", err, out)
+                 } else {
+                     _, err := oFile.WriteString(string(out))
+                     if err != nil {
+                         fmt.Println(err)
+                     }
+                     tmpfile.Truncate(0)
+                     tmpfile.Seek(0,0)
+                 }
              } else {
-                _, err := oFile.WriteString(string(out))
-                if err != nil {
-                   fmt.Println(err)
-                }
-                tmpfile.Truncate(0)
-                tmpfile.Seek(0,0)
+                 telem := &telemetry.Telemetry{}
+                 err = proto.Unmarshal(reply.Data, telem)
+                 if (err != nil) {
+                     fmt.Println("Failed to unmarshal:", err)
+                 }
+                 j, _ :=  json.MarshalIndent(telem, "", "  ")
+                 _, err = oFile.WriteString(string(j))
              }
          }
      }
 
-     tmpfile.Close()
 }
 
-/*
- * Get Proto request
- */
+// Get Proto request
 func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProtoFileArgs) int64 {
      var oFile *os.File
 
@@ -187,72 +274,15 @@ func mdtGetProto(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.GetProto
      return 0
 }
 
-func main() {
-     flag.Parse()
-     var opts []grpc.DialOption
-     var cred passCredential
 
-     if !*dontClean {
-           // install signal handler for cleaning up tmp files
-           sigs := make(chan os.Signal, 1)
-           signal.Notify(sigs, os.Interrupt)
-           go func() {
-              <- sigs
-              //cleanup()
-              files, _ := filepath.Glob("/tmp/telemetry-msg-*")
-              for _, f := range files {
-                  if err := os.Remove(f); err != nil {
-                     fmt.Printf("Failed to remove tmp file %s\n",f)
-                  }
-              }
-              os.Exit(0)
-           }()
-     }
+type passCredential int
+func (passCredential) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+     return map[string]string{
+                "username": *username,
+                "password": *password,
+            }, nil
+}
 
-     // TODO: add TLS support
-     opts = append(opts, grpc.WithInsecure())
-     opts = append(opts, grpc.WithPerRPCCredentials(cred))
-
-     conn, err := grpc.Dial(*serverAddr, opts...)
-     if err != nil {
-        log.Fatalf("fail to dial: %v", err)
-     }
-     defer conn.Close()
-
-     configOperClient := MdtDialin.NewGRPCConfigOperClient(conn)
-
-     reqId := int64(os.Getpid())
-     telemetryEncode, ok := telemetryEncoding[*encoding]
-     if !ok {
-        log.Fatalf("Not supported encoding: %s", *encoding)
-     }
-     telemetrySubIdstr := *subIds
-     telemetryQos := (uint32)(*qos)
-
-     if strings.EqualFold(*operation, "subscribe") {
-        subidstrings := strings.Split(telemetrySubIdstr, "#")
-
-        var marking *MdtDialin.QOSMarking
-        if telemetryQos != NotConfigured {
-           marking = &MdtDialin.QOSMarking{Marking: telemetryQos}
-        }
-
-        createSubsArgs := MdtDialin.CreateSubsArgs{
-                          ReqId:         reqId,
-                          Encode:        telemetryEncode,
-                          Subidstr:      telemetrySubIdstr,
-                          Subscriptions: subidstrings,
-                          Qos:           marking}
-
-        mdtSubscribe(configOperClient, &createSubsArgs)
-     } else if strings.EqualFold(*operation, "get-proto") {
-        if len(*yangPath) > 0 {
-           getProtoArgs := MdtDialin.GetProtoFileArgs{ReqId: reqId, YangPath: *yangPath}
-           mdtGetProto(configOperClient, &getProtoArgs)
-        } else {
-           fmt.Println("No yang path specified!")
-        }
-     } else {
-        fmt.Println("Unsupported operation!")
-     }
+func (passCredential) RequireTransportSecurity() bool {
+     return false
 }

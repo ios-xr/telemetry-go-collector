@@ -6,6 +6,10 @@ If you want to start from scratch or do not have "Go", Protoc, protoc-gen-go or 
 
 Assuming "Go" is already installed, following instructions are for getting collector, building it and running it.
 
+Note:
+Dialout collector supports grpc, tcp and udp transports
+Dialin Collector supports subscribe and get-proto RPCs to IOSXR device
+
 ##### Install instructions:
 `go get -d github.com/ios-xr/telemetry-go-collector`
 
@@ -15,26 +19,42 @@ alternately, use git clone to get the collector to $GOPATH/src directory
 
 If git clone is used, change the import of mdt_grpc_dialout in telemetry_dialout_collector.go to make sure, path is correct relative to $GOPATH/src
 
+##### Requirements
+Need following to be available to be able to build the collectors, binaries can be used as is on linux
+* go
+* protoc
+* grpc
+Install instructions are present in [Dialout-collector-howto.md](Dialout-collector-howto.md)
+
 ### MDT Dialout Collector:
 ##### Build
-`go build -o bin/telemetry_dialout_collector src/github.com/ios-xr/telemetry-go-collector/telemetry_dialout_collector/telemetry_dialout_collector.go`
+`go build -o bin/telemetry_dialout_collector github.com/ios-xr/telemetry-go-collector/telemetry_dialout_collector`
 
 prebuilt binary can be used from bin/telemetry_dialout_collector on Linux.
 
 ##### Run
 ```
-$ ./bin/telemetry_collector -h
-Usage of ./bin/telemetry_collector:
-  -dont_clean
-    	Don't remove tmp files on exit
-  -encoding string
-    	expected encoding of msg (default "json")
-  -port int
-    	The server port (default 57400)
-  -proto string
-    	proto file to use for decode (default "telemetry.proto")
+ $ ./bin/telemetry_dialout_collector -h
+Usage: ./bin/telemetry_dialout_collector [options]
   -decode_raw
-    	Use protoc --decode_raw
+        Use protoc --decode_raw
+  -dont_clean
+        Don't remove tmp files on exit
+  -encoding string
+        expected encoding, Options: json,self-describing-gpb,gpb, needed only for grpc (default "json")
+  -out string
+        output file to write to
+  -port int
+        The server port to listen on (default 57400)
+  -proto string
+        proto file to use for decode
+  -transport string
+        transport to use, grpc, tcp or udp (default "grpc")
+Examples:
+GRPC Server:                             ./bin/telemetry_dialout_collector -port <> -encoding gpb
+TCP Server:                              ./bin/telemetry_dialout_collector -port <> -transport tcp
+GRPC use protoc to decode:               ./bin/telemetry_dialout_collector -port <> -encoding gpb -proto cdp_neighbor.proto
+GRPC use protoc to decode without proto: ./bin/telemetry_dialout_collector -port <> -encoding gpb -decode_raw
  $
  ```
 
@@ -42,14 +62,14 @@ Usage of ./bin/telemetry_collector:
 
 ### MDT Dialin Collector:
 ##### Build
-`go build -o bin/telemetry_dialin_collector src/github.com/ios-xr/telemetry-go-collector/telemetry_dialin_collector/telemetry_dialin_collector.go`
+`go build -o bin/telemetry_dialin_collector github.com/ios-xr/telemetry-go-collector/telemetry_dialin_collector`
 
 prebuilt binary can be used from bin/telemetry_dialin_collector on Linux.
 
 ##### Run
 ```
  $ ./bin/telemetry_dialin_collector -h
-Usage of ./bin/telemetry_dialin_collector:
+Usage: ./bin/telemetry_dialin_collector [options]
   -decode_raw
         Use protoc --decode_raw
   -dont_clean
@@ -57,23 +77,28 @@ Usage of ./bin/telemetry_dialin_collector:
   -encoding string
         encoding to use, Options: json,self-describing-gpb,gpb (default "json")
   -oper string
-        Operation: subscribe, get-proto
+        Operation: subscribe, get-proto (default "subscribe")
   -out string
         output file to write to
   -password string
         Password for the client connection
   -proto string
-        proto file to use for decode (default "telemetry.proto")
+        proto file to use for decode
   -qos uint
-        Qos to use for the session
+        Qos to use for the session (default 65535)
   -server string
-        The server address, host:port (default "127.0.0.1:57400")
+        The server address, host:port
   -subscription string
         Subscription name to subscribe to
   -username string
         Username for the client connection
   -yang_path string
         Yang path for get-proto
+Examples:
+Subscribe: ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>
+Get proto for yang path:   ./bin/telemetry_dialin_collector -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>
+Subscribe, use protoc to decode:   ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto
+Subscribe, use protoc to decode without proto: ./bin/telemetry_dialin_collector %!s(MISSING) -server <ip:port> -subscription <> -encoding gpb -decode_raw
  $
 ```
 
