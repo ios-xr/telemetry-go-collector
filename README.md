@@ -27,6 +27,7 @@ Need following to be available to be able to build the collectors, binaries can 
 
 Install instructions are present in [Dialout-collector-howto.md](Dialout-collector-howto.md)
 
+--------
 ### MDT Dialout Collector:
 ##### Build
 `go build -o bin/telemetry_dialout_collector github.com/ios-xr/telemetry-go-collector/telemetry_dialout_collector`
@@ -61,6 +62,7 @@ GRPC use protoc to decode without proto: ./bin/telemetry_dialout_collector -port
 
 ![](docs/dialout-build.gif)
 
+--------------------
 ### MDT Dialin Collector:
 ##### Build
 `go build -o bin/telemetry_dialin_collector github.com/ios-xr/telemetry-go-collector/telemetry_dialin_collector`
@@ -102,7 +104,7 @@ Subscribe, use protoc to decode:   ./bin/telemetry_dialin_collector -server <ip:
 Subscribe, use protoc to decode without proto: ./bin/telemetry_dialin_collector %!s(MISSING) -server <ip:port> -subscription <> -encoding gpb -decode_raw
  $
 ```
-
+-------------------------
 ### Example usage:
 #### Dialout Server:
 ```
