@@ -20,8 +20,8 @@ import (
         "google.golang.org/grpc/peer"
         "github.com/golang/protobuf/proto"
 
-        "mdt_grpc_dialout"
-        "telemetry"
+        "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialout"
+        "github.com/ios-xr/telemetry-go-collector/telemetry"
 )
 
 var usage = func() {

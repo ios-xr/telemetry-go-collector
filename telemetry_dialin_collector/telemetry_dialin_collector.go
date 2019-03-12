@@ -18,8 +18,8 @@ import (
        "google.golang.org/grpc"
         "github.com/golang/protobuf/proto"
 
-       MdtDialin "mdt_grpc_dialin"
-       "telemetry"
+       MdtDialin "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialin"
+       "github.com/ios-xr/telemetry-go-collector/telemetry"
 )
 
 const tmpFileName                = "telemetry-msg-*.dat"
