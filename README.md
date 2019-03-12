@@ -6,8 +6,8 @@ If you want to start from scratch or do not have "Go", Protoc, protoc-gen-go or 
 
 Assuming "Go" is already installed, following instructions are for getting collector, building it and running it.
 
-Note:
-Dialout collector supports grpc, tcp and udp transports
+Note:  
+Dialout collector supports grpc, tcp and udp transports  
 Dialin Collector supports subscribe and get-proto RPCs to IOSXR device
 
 #### Install instructions:
