@@ -62,10 +62,18 @@ func (s *tcpSession) handleConnection() {
      var hdr tcpMsgHdr
      var buf []byte
 
-     tmpFile, commandString := mdtPrepareDecoding()
-     if tmpFile != nil {
-         defer tmpFile.Close()
+     dataChan := make(chan []byte, 10000)
+     defer close(dataChan)
+     o := &mdtOut{
+                outFile:     *outFileName,
+                encoding:    *encoding,
+                decode_raw:  *decode_raw,
+                protoFile:   *protoFile,
+                dataChan:     dataChan,
      }
+
+     go o.mdtOutLoop()
+
      for {
          // read header for tcp message.
          _, err := io.ReadFull(s.conn, s.hdr)
@@ -80,7 +88,7 @@ func (s *tcpSession) handleConnection() {
          }
          hdrbuf := bytes.NewReader(s.hdr)
          err = binary.Read(hdrbuf, binary.BigEndian, &hdr)
-         fmt.Printf("Received message len: %v encode %v\n", hdr.Msglen, hdr.MsgEncap)
+         //fmt.Printf("Received message len: %v encode %v\n", hdr.Msglen, hdr.MsgEncap)
          buf = make([]byte, hdr.Msglen)
 
          // read rest of the tcp message using length from header.
@@ -89,8 +97,11 @@ func (s *tcpSession) handleConnection() {
             fmt.Println(err)
             continue
          }
-         enc := mdtGetEncodeStr(hdr.MsgEncap)
-         mdtDumpData(buf, enc, commandString, tmpFile)
+
+         // set the encoding from header
+         o.mdtOutSetEncoding(mdtGetEncodeStr(hdr.MsgEncap))
+         // write to the data channel
+         dataChan <- buf
      }
 }
 

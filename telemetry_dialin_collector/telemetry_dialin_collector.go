@@ -1,31 +1,22 @@
 package main
 
 import (
-       "bytes"
-       "encoding/json"
        "flag"
        "fmt"
        "io"
-       "io/ioutil"
        "log"
        "os"
-       "os/exec"
        "os/signal"
        "strings"
        "path/filepath"
 
        "golang.org/x/net/context"
        "google.golang.org/grpc"
-        "github.com/golang/protobuf/proto"
 
        MdtDialin "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialin"
-       "github.com/ios-xr/telemetry-go-collector/telemetry"
 )
 
-const tmpFileName                = "telemetry-msg-*.dat"
-const ProtocRawDecode string     = "protoc --decode_raw "
-const ProtocCommandString string = "protoc --decode=Telemetry "
-
+const tmpFileName   = "telemetry-msg-*.dat"
 const NotConfigured = 0xffff
 
 var telemetryEncoding = map[string]int64{
@@ -39,9 +30,9 @@ var usage = func() {
 
     flag.PrintDefaults()
     fmt.Fprintf(os.Stderr, "Examples:\n")
-    fmt.Fprintf(os.Stderr, "Subscribe: %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
-    fmt.Fprintf(os.Stderr, "Get proto for yang path:   %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
-    fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode:   %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Subscribe                       : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Get proto for yang path         : %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode : %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode without proto: %s %s -server <ip:port> -subscription <> -encoding gpb -decode_raw\n", os.Args[0])
 }
 
@@ -60,6 +51,7 @@ var (
                                    "Password for the client connection")
         decode_raw   = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
         protoFile    = flag.String("proto", "", "proto file to use for decode")
+        pluginDir    = flag.String("plugin_dir", "", "absolute path to directory for proto plugins")
         dontClean    = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
 )
 
@@ -135,34 +127,11 @@ func main() {
 
 // createSubs rpc to subscribe
 func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateSubsArgs) {
-     var oFile *os.File
-     var tmpfile *os.File
-     var commandString string
-     var prettyJSON bytes.Buffer
-     var err error
+     fmt.Printf("mdtSubscribe: Dialin Reqid %d subscription %s\n", args.ReqId, args.Subscriptions)
 
-     fmt.Printf("mdtSubscribe: Dialin %d subscription %s\n", args.ReqId, args.Subscriptions)
-
-     oFile = os.Stdout
-     if len(*outFile) != 0 {
-        oFile, _ = os.Create(*outFile)
-        defer oFile.Close()
-     }
-
-     if *decode_raw || (len(*protoFile) != 0) {
-         tmpfile, err = ioutil.TempFile("", tmpFileName)
-         if (err != nil) {
-             log.Fatal("Failed to create tmp file for writing", err)
-         }
-         defer os.Remove(tmpfile.Name())
-         defer tmpfile.Close()
-
-         if *decode_raw {
-             commandString = ProtocRawDecode + "<" + tmpfile.Name()
-         } else {
-             commandString = ProtocCommandString + *protoFile + "<" + tmpfile.Name()
-         }
-     }
+     dataChan := make(chan *MdtDialin.CreateSubsReply, 10000)
+     defer close(dataChan)
+     go mdtOutLoop(dataChan, args.Encode)
 
      stream, err := client.CreateSubs(context.Background(), args)
      if err != nil {
@@ -185,42 +154,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
                break
             }
          } else {
-             if args.Encode == 4 {
-                err = json.Indent(&prettyJSON, reply.Data, "", "\t")
-                if err != nil {
-                   fmt.Println("JSON parse error: ", err)
-                } else {
-                   _, err := oFile.WriteString(string(prettyJSON.Bytes()))
-                   if err != nil {
-                      fmt.Println(err)
-                   }
-                }
-                continue
-             }
-             if *decode_raw || (len(*protoFile) != 0) {
-                 // use protoc to decode
-                 /* Write to tmp file and run protoc command to decode */
-                 _, err = tmpfile.Write(reply.Data)
-                 out, err := exec.Command("sh", "-c", commandString).CombinedOutput()
-                 if err != nil {
-                     fmt.Println("Protoc error", err, out)
-                 } else {
-                     _, err := oFile.WriteString(string(out))
-                     if err != nil {
-                         fmt.Println(err)
-                     }
-                     tmpfile.Truncate(0)
-                     tmpfile.Seek(0,0)
-                 }
-             } else {
-                 telem := &telemetry.Telemetry{}
-                 err = proto.Unmarshal(reply.Data, telem)
-                 if (err != nil) {
-                     fmt.Println("Failed to unmarshal:", err)
-                 }
-                 j, _ :=  json.MarshalIndent(telem, "", "  ")
-                 _, err = oFile.WriteString(string(j))
-             }
+            dataChan <- reply
          }
      }
 

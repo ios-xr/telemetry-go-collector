@@ -2,26 +2,18 @@ package main
 
 import (
         "os"
-        "os/exec"
         "os/signal"
         "flag"
         "fmt"
         "io"
-        "io/ioutil"
-        "log"
-        "time"
         "net"
-        "bytes"
         "strconv"
-        "encoding/json"
         "path/filepath"
 
         "google.golang.org/grpc"
         "google.golang.org/grpc/peer"
-        "github.com/golang/protobuf/proto"
 
         "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialout"
-        "github.com/ios-xr/telemetry-go-collector/telemetry"
 )
 
 var usage = func() {
@@ -29,28 +21,24 @@ var usage = func() {
 
     flag.PrintDefaults()
     fmt.Fprintf(os.Stderr, "Examples:\n")
-    fmt.Fprintf(os.Stderr, "GRPC Server:                             %s -port <> -encoding gpb\n", os.Args[0])
-    fmt.Fprintf(os.Stderr, "TCP Server:                              %s -port <> -transport tcp\n", os.Args[0])
-    fmt.Fprintf(os.Stderr, "GRPC use protoc to decode:               %s -port <> -encoding gpb -proto cdp_neighbor.proto\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "GRPC Server                            : %s -port <> -encoding gpb\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "TCP Server                             : %s -port <> -transport tcp\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "GRPC use protoc to decode              : %s -port <> -encoding gpb -proto cdp_neighbor.proto\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "GRPC use protoc to decode without proto: %s -port <> -encoding gpb -decode_raw\n", os.Args[0])
 }
 var (
-        port          = flag.Int("port", 57400, "The server port to listen on")
-        encoding      = flag.String("encoding", "json",
-                                    "expected encoding, Options: json,self-describing-gpb,gpb, needed only for grpc")
-        decode_raw    = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
-        protoFile     = flag.String("proto", "", "proto file to use for decode")
-        transport     = flag.String("transport", "grpc", "transport to use, grpc, tcp or udp")
-        dontClean     = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
-        outFile      = flag.String("out", "", "output file to write to")
+        port         = flag.Int("port", 57400, "The server port to listen on")
+        encoding     = flag.String("encoding", "json",
+                                   "expected encoding, Options: json,self-describing-gpb,gpb, needed only for grpc")
+        decode_raw   = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
+        protoFile    = flag.String("proto", "", "proto file to use for decode")
+        transport    = flag.String("transport", "grpc", "transport to use, grpc, tcp or udp")
+        dontClean    = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
+        outFileName  = flag.String("out", "dump_*.txt", "output file to write to")
+        pluginDir    = flag.String("plugin_dir", "", "absolute path to directory for proto plugins")
 )
 
-// output file
-var oFile *os.File
-
 const tmpFileName                = "telemetry-msg-*.dat"
-const ProtocRawDecode string     = "protoc --decode_raw "
-const ProtocCommandString string = "protoc --decode=Telemetry "
 
 func main() {
      flag.Usage = usage
@@ -63,7 +51,7 @@ func main() {
          go func() {
              <- sigs
              // cleanup
-             files, _ := filepath.Glob("/tmp/" + tmpFileName)
+             files, _ := filepath.Glob(os.TempDir() + "/" + tmpFileName)
              for _, f := range files {
                  if err := os.Remove(f); err != nil {
                      fmt.Printf("Failed to remove tmp file %s\n",f)
@@ -71,13 +59,6 @@ func main() {
              }
              os.Exit(0)
          }()
-     }
-
-     // write data to stdout unless output file is specified
-     oFile = os.Stdout
-     if len(*outFile) != 0 {
-        oFile, _ = os.Create(*outFile)
-        defer oFile.Close()
      }
 
      if (*transport == "tcp") {
@@ -115,18 +96,23 @@ func mdtGrpcServer(grpcPort string) {
 type gRPCMdtDialoutServer struct{}
 
 func (s *gRPCMdtDialoutServer) MdtDialout(stream mdt_dialout.GRPCMdtDialout_MdtDialoutServer) error {
-     var numMsgs = 0
-     var commandString string
-
      peer, ok := peer.FromContext(stream.Context())
      if ok {
          fmt.Printf("Session connected from %s\n", peer.Addr.String())
      }
 
-     tmpFile, commandString := mdtPrepareDecoding()
-     if tmpFile != nil {
-         defer tmpFile.Close()
+     dataChan := make(chan []byte, 10000)
+     defer close(dataChan)
+     o := &mdtOut{
+                outFile:     *outFileName,
+                encoding:    *encoding,
+                decode_raw:  *decode_raw,
+                protoFile:   *protoFile,
+                dataChan:     dataChan,
      }
+     // handler for decoding the data, reads data from dataChan
+     go o.mdtOutLoop()
+
      for {
          reply, err := stream.Recv()
          if err == io.EOF {
@@ -137,79 +123,9 @@ func (s *gRPCMdtDialoutServer) MdtDialout(stream mdt_dialout.GRPCMdtDialout_MdtD
              fmt.Printf("MdtDialout: Stream Recv got error %v", err)
              return err
          }
-         numMsgs++
-         t := time.Now()
-         fmt.Println(t.Format(time.RFC3339Nano), "message count: ", numMsgs, "bytes ", len(reply.Data))
 
-         mdtDumpData(reply.Data, *encoding, commandString, tmpFile)
+         dataChan <- reply.Data
      }
 
      return nil
-}
-
-/////////////////
-// handle output
-/////////////////
-func mdtDumpData(data []byte, enc string, commandString string, tmpFile *os.File) {
-     var prettyJSON bytes.Buffer
-     var err error
-
-     if (enc == "json") {
-        err = json.Indent(&prettyJSON, data, "", "\t")
-        if err != nil {
-           fmt.Println("JSON parse error: ", err)
-        } else {
-           _, err = oFile.WriteString(string(prettyJSON.Bytes()))
-        }
-     } else if ((enc == "self-describing-gpb") ||
-                (enc == "gpb")) {
-         if (tmpFile == nil) {
-             telem := &telemetry.Telemetry{}
-             err = proto.Unmarshal(data, telem)
-             if (err != nil) {
-                 fmt.Println("Failed to unmarshal:", err)
-             }
-             j, _ :=  json.MarshalIndent(telem, "", "  ")
-             _, err = oFile.WriteString(string(j))
-         } else {
-             // Write to tmp file
-             _, err = tmpFile.Write(data)
-             if (err != nil) {
-                 fmt.Println("Failed to write to tmp file", err)
-             }
-
-             // Decode the data using protoc
-             out, err := exec.Command("sh", "-c", commandString).CombinedOutput()
-             if err == nil {
-                 _, err = oFile.WriteString(string(out))
-                 tmpFile.Truncate(0)
-                 tmpFile.Seek(0,0)
-             } else {
-                 fmt.Println("Protoc error", err, out)
-             }
-         }
-     } else {
-        fmt.Println("Unknown encoding")
-     }
-}
-
-func mdtPrepareDecoding() (*os.File, string) {
-     var commandString string
-
-     if *decode_raw || (len(*protoFile) != 0) {
-         // temp file to write message to for decoding
-         tmpFile, err := ioutil.TempFile("", tmpFileName)
-         if (err != nil) {
-             log.Fatal("Failed to create tmp file for writing", err)
-         }
-
-         // proto command to use for decoding gpb message
-         if *decode_raw {
-             commandString = ProtocRawDecode + " < " + tmpFile.Name()
-         } else {
-             commandString = ProtocCommandString + *protoFile + " < " + tmpFile.Name()
-         }
-         return tmpFile, commandString
-     }
-     return nil, ""
 }

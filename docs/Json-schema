@@ -1,0 +1,126 @@
+{
+  "definitions": {},
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "http://example.com/root.json",
+  "type": "object",
+  "title": "The Root Schema",
+  "required": [
+    "node_id_str",
+    "subscription_id_str",
+    "encoding_path",
+    "collection_id",
+    "collection_start_time",
+    "msg_timestamp",
+    "data_json",
+    "collection_end_time"
+  ],
+  "properties": {
+    "node_id_str": {
+      "$id": "#/properties/node_id_str",
+      "type": "string",
+      "title": "The Node_id_str Schema",
+      "default": "",
+      "examples": [
+        "RP/0/RP0/CPU0"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "subscription_id_str": {
+      "$id": "#/properties/subscription_id_str",
+      "type": "string",
+      "title": "The Subscription_id_str Schema",
+      "default": "",
+      "examples": [
+        "isis-nbr"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "encoding_path": {
+      "$id": "#/properties/encoding_path",
+      "type": "string",
+      "title": "The Encoding_path Schema",
+      "default": "",
+      "examples": [
+        "Cisco-IOS-XR-clns-isis-oper:isis/instances/instance/neighbors/neighbor"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "collection_id": {
+      "$id": "#/properties/collection_id",
+      "type": "string",
+      "title": "The Collection_id Schema",
+      "default": "",
+      "examples": [
+        "77598"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "collection_start_time": {
+      "$id": "#/properties/collection_start_time",
+      "type": "string",
+      "title": "The Collection_start_time Schema",
+      "default": "",
+      "examples": [
+        "1553480384585"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "msg_timestamp": {
+      "$id": "#/properties/msg_timestamp",
+      "type": "string",
+      "title": "The Msg_timestamp Schema",
+      "default": "",
+      "examples": [
+        "1553480384591"
+      ],
+      "pattern": "^(.*)$"
+    },
+    "data_json": {
+      "$id": "#/properties/data_json",
+      "type": "array",
+      "title": "The Data_json Schema",
+      "items": {
+        "$id": "#/properties/data_json/items",
+        "type": "object",
+        "title": "The Items Schema",
+        "required": [
+          "timestamp",
+          "keys",
+          "content"
+        ],
+        "properties": {
+          "timestamp": {
+            "$id": "#/properties/data_json/items/properties/timestamp",
+            "type": "string",
+            "title": "The Timestamp Schema",
+            "default": "",
+            "examples": [
+              "1553480384590"
+            ],
+            "pattern": "^(.*)$"
+          },
+          "keys": {
+            "$id": "#/properties/data_json/items/properties/keys",
+            "type": "array",
+            "title": "The Keys Schema"
+          },
+          "content": {
+            "$id": "#/properties/data_json/items/properties/content",
+            "type": "object",
+            "title": "The Content Schema"
+          }
+        }
+      }
+    },
+    "collection_end_time": {
+      "$id": "#/properties/collection_end_time",
+      "type": "string",
+      "title": "The Collection_end_time Schema",
+      "default": "",
+      "examples": [
+        "1553480384592"
+      ],
+      "pattern": "^(.*)$"
+    }
+  }
+}

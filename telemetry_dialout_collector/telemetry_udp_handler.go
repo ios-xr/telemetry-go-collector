@@ -23,10 +23,18 @@ func mdtUdpServer(udpPort string) error {
      var err error
      var hdr tcpMsgHdr
 
-     tmpFile, commandString := mdtPrepareDecoding()
-     if tmpFile != nil {
-         defer tmpFile.Close()
+     dataChan := make(chan []byte, 10000)
+     defer close(dataChan)
+     o := &mdtOut{
+                outFile:     *outFileName,
+                encoding:    *encoding,
+                decode_raw:  *decode_raw,
+                protoFile:   *protoFile,
+                dataChan:     dataChan,
      }
+
+     go o.mdtOutLoop()
+
      ServerAddr, err := net.ResolveUDPAddr("udp", udpPort)
      if err != nil {
          panic(err)
@@ -56,11 +64,13 @@ func mdtUdpServer(udpPort string) error {
          // msg header is 12 bytes
          hdrbuf := bytes.NewReader(buf[:12])
          err = binary.Read(hdrbuf, binary.BigEndian, &hdr)
-         fmt.Printf("From %s received message len: %v encode %v\n",
-                    addr, hdr.Msglen, hdr.MsgEncap)
+         //fmt.Printf("From %s received message len: %v encode %v\n",
+         //           addr, hdr.Msglen, hdr.MsgEncap)
 
-         enc := mdtGetEncodeStr(hdr.MsgEncap)
-         mdtDumpData(buf[12:n], enc, commandString, tmpFile)
+         // set the encoding from header
+         o.mdtOutSetEncoding(mdtGetEncodeStr(hdr.MsgEncap))
+         // write to data channel
+         dataChan <- buf[12:n]
      }
 
      return nil
