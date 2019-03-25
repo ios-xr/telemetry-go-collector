@@ -11,12 +11,11 @@ If you want to start from scratch or do not have "Go", Protoc, protoc-gen-go or 
 
 Assuming "Go" is already installed, following instructions are for getting collector, building it and running it.
 
-**Note:  
+**Note:**  
 * Dialout collector supports GRPC, TCP and UDP transports  
 * Dialin Collector supports subscribe and get-proto RPCs to IOSXR device over GRPC as transport  
-* Decode logic in the collector including Compact GPB encoded messages
-is explained at [docs/Decode-Compact-GPB-Message.md](docs/Decode-Compact-GPB-Message.md)
-**
+* Decode logic in the collector including Compact GPB encoded messages is explained at [docs/Decode-Compact-GPB-Message](docs/Decode-Compact-GPB-Message.md)
+
 #### Install instructions:
 `go get -d github.com/ios-xr/telemetry-go-collector`
 
