@@ -6,6 +6,8 @@ import (
         "net"
         "bytes"
         "encoding/binary"
+
+        "github.com/ios-xr/telemetry-go-collector/telemetry_decode"
 )
 
 ///////////////////////////////////
@@ -25,15 +27,17 @@ func mdtUdpServer(udpPort string) error {
 
      dataChan := make(chan []byte, 10000)
      defer close(dataChan)
-     o := &mdtOut{
-                outFile:     *outFileName,
-                encoding:    *encoding,
-                decode_raw:  *decode_raw,
-                protoFile:   *protoFile,
-                dataChan:     dataChan,
+     o := &telemetry_decode.MdtOut{
+                        OutFile:     *outFileName,
+                        Encoding:    *encoding,
+                        Decode_raw:  *decode_raw,
+                        DontClean:   *dontClean,
+                        ProtoFile:   *protoFile,
+                        PluginDir:   *pluginDir,
+                        DataChan:     dataChan,
      }
 
-     go o.mdtOutLoop()
+     go o.MdtOutLoop()
 
      ServerAddr, err := net.ResolveUDPAddr("udp", udpPort)
      if err != nil {
@@ -68,7 +72,7 @@ func mdtUdpServer(udpPort string) error {
          //           addr, hdr.Msglen, hdr.MsgEncap)
 
          // set the encoding from header
-         o.mdtOutSetEncoding(mdtGetEncodeStr(hdr.MsgEncap))
+         o.MdtOutSetEncoding(mdtGetEncodeStr(hdr.MsgEncap))
          // write to data channel
          dataChan <- buf[12:n]
      }

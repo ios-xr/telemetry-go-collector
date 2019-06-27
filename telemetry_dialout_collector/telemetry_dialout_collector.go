@@ -12,8 +12,10 @@ import (
 
         "google.golang.org/grpc"
         "google.golang.org/grpc/peer"
+        "google.golang.org/grpc/credentials"
 
         "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialout"
+        "github.com/ios-xr/telemetry-go-collector/telemetry_decode"
 )
 
 var usage = func() {
@@ -22,6 +24,7 @@ var usage = func() {
     flag.PrintDefaults()
     fmt.Fprintf(os.Stderr, "Examples:\n")
     fmt.Fprintf(os.Stderr, "GRPC Server                            : %s -port <> -encoding gpb\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "GRPC with TLS                          : %s -port <> -encoding gpb -cert <> -key <>\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "TCP Server                             : %s -port <> -transport tcp\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "GRPC use protoc to decode              : %s -port <> -encoding gpb -proto cdp_neighbor.proto\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "GRPC use protoc to decode without proto: %s -port <> -encoding gpb -decode_raw\n", os.Args[0])
@@ -29,13 +32,16 @@ var usage = func() {
 var (
         port         = flag.Int("port", 57400, "The server port to listen on")
         encoding     = flag.String("encoding", "json",
-                                   "expected encoding, Options: json,self-describing-gpb,gpb, needed only for grpc")
+                                   "expected encoding, Options: json,self-describing-gpb,gpb needed only for grpc")
         decode_raw   = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
         protoFile    = flag.String("proto", "", "proto file to use for decode")
         transport    = flag.String("transport", "grpc", "transport to use, grpc, tcp or udp")
         dontClean    = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
         outFileName  = flag.String("out", "dump_*.txt", "output file to write to")
         pluginDir    = flag.String("plugin_dir", "", "absolute path to directory for proto plugins")
+        pluginFile    = flag.String("plugin", "", "plugin file, used to lookup gpb symbol for decode")
+        certFile     = flag.String("cert","","TLS cert file")
+        keyFile      = flag.String("key","","TLS key file")
 )
 
 const tmpFileName                = "telemetry-msg-*.dat"
@@ -76,6 +82,16 @@ func mdtGrpcServer(grpcPort string) {
      var err error
      var opts []grpc.ServerOption
 
+     if *certFile != "" && *keyFile != "" {
+         fmt.Printf("Enabled TLS, cert: %v key: %v\n", *certFile, *keyFile)
+         creds, err := credentials.NewServerTLSFromFile(*certFile, *keyFile)
+         if err != nil {
+             fmt.Printf("Failed to generate credentials %v", err)
+             return
+         }
+         opts = []grpc.ServerOption{grpc.Creds(creds)}
+     }
+
      grpcServer := grpc.NewServer(opts...)
      s := gRPCMdtDialoutServer{}
      mdt_dialout.RegisterGRPCMdtDialoutServer(grpcServer, &s)
@@ -103,15 +119,18 @@ func (s *gRPCMdtDialoutServer) MdtDialout(stream mdt_dialout.GRPCMdtDialout_MdtD
 
      dataChan := make(chan []byte, 10000)
      defer close(dataChan)
-     o := &mdtOut{
-                outFile:     *outFileName,
-                encoding:    *encoding,
-                decode_raw:  *decode_raw,
-                protoFile:   *protoFile,
-                dataChan:     dataChan,
+     o := &telemetry_decode.MdtOut{
+                        OutFile:     *outFileName,
+                        Encoding:    *encoding,
+                        Decode_raw:  *decode_raw,
+                        DontClean:   *dontClean,
+                        ProtoFile:   *protoFile,
+                        PluginDir:   *pluginDir,
+                        PluginFile:  *pluginFile,
+                        DataChan:     dataChan,
      }
      // handler for decoding the data, reads data from dataChan
-     go o.mdtOutLoop()
+     go o.MdtOutLoop()
 
      for {
          reply, err := stream.Recv()

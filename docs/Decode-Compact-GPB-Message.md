@@ -45,7 +45,7 @@ if transport is TCP or UDP, 12 byte header in the message has encode type
 **MsgEncap: 1:GPB and 2:JSON**  
 Decode will happen based on the encode type from the header.
 
-For GRPC dialin as well as dailout, collector needs encoding to be passed as input argument.
+For GRPC dialin as well as dailout collector needs encoding to be passed as input argument.
 
 1) If received message is json, write the message to out file as json
 pretty print

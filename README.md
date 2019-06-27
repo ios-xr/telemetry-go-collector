@@ -15,6 +15,7 @@ Assuming "Go" is already installed, following instructions are for getting colle
 * Dialout collector supports GRPC, TCP and UDP transports  
 * Dialin Collector supports subscribe and get-proto RPCs to IOSXR device over GRPC as transport  
 * Decode logic in the collector including Compact GPB encoded messages is explained at [docs/Decode-Compact-GPB-Message](docs/Decode-Compact-GPB-Message.md)
+* Streamed messages can be pushed to elasticsearch using "-out elasticsearch:<ip>:<port>" option when collector is started
 
 #### Install instructions:
 `go get -d github.com/ios-xr/telemetry-go-collector`
@@ -44,14 +45,20 @@ prebuilt binary can be used from bin/telemetry_dialout_collector on Linux.
 ```
  $ ./bin/telemetry_dialout_collector -h
 Usage: ./bin/telemetry_dialout_collector [options]
+  -cert string
+        TLS cert file
   -decode_raw
         Use protoc --decode_raw
   -dont_clean
         Don't remove tmp files on exit
   -encoding string
-        expected encoding, Options: json,self-describing-gpb,gpb, needed only for grpc (default "json")
+        expected encoding, Options: json,self-describing-gpb,gpb needed only for grpc (default "json")
+  -key string
+        TLS key file
   -out string
         output file to write to (default "dump_*.txt")
+  -plugin string
+        plugin file, used to lookup gpb symbol for decode
   -plugin_dir string
         absolute path to directory for proto plugins
   -port int
@@ -62,6 +69,7 @@ Usage: ./bin/telemetry_dialout_collector [options]
         transport to use, grpc, tcp or udp (default "grpc")
 Examples:
 GRPC Server                            : ./bin/telemetry_dialout_collector -port <> -encoding gpb
+GRPC with TLS                          : ./bin/telemetry_dialout_collector -port <> -encoding gpb -cert <> -key <>
 TCP Server                             : ./bin/telemetry_dialout_collector -port <> -transport tcp
 GRPC use protoc to decode              : ./bin/telemetry_dialout_collector -port <> -encoding gpb -proto cdp_neighbor.proto
 GRPC use protoc to decode without proto: ./bin/telemetry_dialout_collector -port <> -encoding gpb -decode_raw
@@ -81,6 +89,8 @@ prebuilt binary can be used from bin/telemetry_dialin_collector on Linux.
 ```
  $ ./bin/telemetry_dialin_collector -h
 Usage: ./bin/telemetry_dialin_collector [options]
+  -cert string
+        TLS cert file
   -decode_raw
         Use protoc --decode_raw
   -dont_clean
@@ -93,6 +103,8 @@ Usage: ./bin/telemetry_dialin_collector [options]
         output file to write to
   -password string
         Password for the client connection
+  -plugin string
+        plugin file, used to lookup gpb symbol for decode
   -plugin_dir string
         absolute path to directory for proto plugins
   -proto string
@@ -101,6 +113,8 @@ Usage: ./bin/telemetry_dialin_collector [options]
         Qos to use for the session (default 65535)
   -server string
         The server address, host:port
+  -server_host_override string
+        The server name to verify the hostname returned during TLS handshake (default "ems.cisco.com")
   -subscription string
         Subscription name to subscribe to
   -username string
@@ -110,6 +124,7 @@ Usage: ./bin/telemetry_dialin_collector [options]
 Examples:
 Subscribe                       : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>
 Get proto for yang path         : ./bin/telemetry_dialin_collector -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>
+Subscribe, using TLS            : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -cert <>
 Subscribe, use protoc to decode : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto
 Subscribe, use protoc to decode without proto: ./bin/telemetry_dialin_collector %!s(MISSING) -server <ip:port> -subscription <> -encoding gpb -decode_raw
  $
@@ -120,9 +135,15 @@ Subscribe, use protoc to decode without proto: ./bin/telemetry_dialin_collector 
 ```
   // default encoding, expects json message to be streamed
   telemetry_dialout_collector -port 57500
-  // Uses telemetry.proto from current directory to decode, needs protoc to be present in $PATH
+  // Uses self-describing-gpb
   telemetry_dialout_collector -port 57500 -encoding self-describing-gpb
-  // decode gpb message with proto
+  // Uses self-describing-gpb with tls
+  telemetry_dialout_collector -port 57500 -encoding self-describing-gpb -cert <cert.pem> -key <private-key.pem>
+  // Uses self-describing-gpb with tls, push to elasticsearch
+  telemetry_dialout_collector -port 57500 -encoding self-describing-gpb -cert <cert.pem> -key <private-key.pem> -out elasticsearch:<ip-addr>:9200
+  // Uses gpb with tls, push to elasticsearch
+  telemetry_dialout_collector -port 57500 -encoding gpb -cert <cert.pem> -key <private-key.pem> -out elasticsearch:<ip-addr>:9200 -plugin <plugin.so>
+ // decode gpb message without proto, needs protoc to be present in $PATH
   telemetry_dialout_collector -port 57500 -encoding gpb -decode_raw
 ```
 #### Dialin client:
@@ -131,7 +152,8 @@ Subscribe, use protoc to decode without proto: ./bin/telemetry_dialin_collector 
 ```
 ###### Subscribe to a subscription configured on the router
 ```
-  telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -proto cdp_neighbor_compact.proto 
+  telemetry_dialin_collector -server "192.168.122.157:57500"
+  -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -plugin plugin_66x.so
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab -encoding gpb -qos 10 -decode_raw
   telemetry_dialin_collector -server "192.168.122.157:57500" -subscription cdp-neighbor -oper subscribe -username root -password lab
 ```

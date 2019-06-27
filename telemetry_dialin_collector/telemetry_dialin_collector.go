@@ -12,8 +12,10 @@ import (
 
        "golang.org/x/net/context"
        "google.golang.org/grpc"
+       "google.golang.org/grpc/credentials"
 
        MdtDialin "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialin"
+       "github.com/ios-xr/telemetry-go-collector/telemetry_decode"
 )
 
 const tmpFileName   = "telemetry-msg-*.dat"
@@ -32,6 +34,7 @@ var usage = func() {
     fmt.Fprintf(os.Stderr, "Examples:\n")
     fmt.Fprintf(os.Stderr, "Subscribe                       : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "Get proto for yang path         : %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
+    fmt.Fprintf(os.Stderr, "Subscribe, using TLS            : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -cert <>\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode : %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
     fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode without proto: %s %s -server <ip:port> -subscription <> -encoding gpb -decode_raw\n", os.Args[0])
 }
@@ -52,7 +55,11 @@ var (
         decode_raw   = flag.Bool("decode_raw", false, "Use protoc --decode_raw")
         protoFile    = flag.String("proto", "", "proto file to use for decode")
         pluginDir    = flag.String("plugin_dir", "", "absolute path to directory for proto plugins")
+        pluginFile    = flag.String("plugin", "", "plugin file, used to lookup gpb symbol for decode")
         dontClean    = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
+        certFile     = flag.String("cert","","TLS cert file")
+        serverHostOverride = flag.String("server_host_override", "ems.cisco.com",
+                           "The server name to verify the hostname returned during TLS handshake")
 )
 
 func main() {
@@ -62,24 +69,29 @@ func main() {
      var cred passCredential
 
      if !*dontClean {
-           // install signal handler for cleaning up tmp files
-           sigs := make(chan os.Signal, 1)
-           signal.Notify(sigs, os.Interrupt)
-           go func() {
-              <- sigs
-              //cleanup()
-              files, _ := filepath.Glob("/tmp/" + tmpFileName)
-              for _, f := range files {
-                  if err := os.Remove(f); err != nil {
+         // install signal handler for cleaning up tmp files
+         sigs := make(chan os.Signal, 1)
+         signal.Notify(sigs, os.Interrupt)
+         go func() {
+             <- sigs
+             //cleanup()
+             files, _ := filepath.Glob("/tmp/" + tmpFileName)
+             for _, f := range files {
+                 if err := os.Remove(f); err != nil {
                      fmt.Printf("Failed to remove tmp file %s\n",f)
-                  }
-              }
-              os.Exit(0)
-           }()
+                 }
+             }
+             os.Exit(0)
+         }()
      }
 
-     // TODO: add TLS support
-     opts = append(opts, grpc.WithInsecure())
+     if (*certFile != "") {
+         var tc credentials.TransportCredentials
+         tc, _ = credentials.NewClientTLSFromFile(*certFile, *serverHostOverride)
+         opts = append(opts, grpc.WithTransportCredentials(tc))
+     } else {
+         opts = append(opts, grpc.WithInsecure())
+     }
      opts = append(opts, grpc.WithPerRPCCredentials(cred))
 
      conn, err := grpc.Dial(*serverAddr, opts...)
@@ -106,13 +118,25 @@ func main() {
            marking = &MdtDialin.QOSMarking{Marking: telemetryQos}
         }
 
-        createSubsArgs := MdtDialin.CreateSubsArgs{
-                          ReqId:         reqId,
-                          Encode:        telemetryEncode,
-                          Subscriptions: subidstrings,
-                          Qos:           marking}
+        //createSubsArgs := MdtDialin.CreateSubsArgs{
+        //                  ReqId:         reqId,
+        //                  Encode:        telemetryEncode,
+        //                  Subscriptions: subidstrings,
+        //                  Qos:           marking}
+        //mdtSubscribe(configOperClient, &createSubsArgs)
 
-        mdtSubscribe(configOperClient, &createSubsArgs)
+        // let's do a session per subscription instead of
+        // 1 session for all subscriptions, which above code does
+        for _, subid := range subidstrings {
+            createSubsArgs := MdtDialin.CreateSubsArgs{
+                              ReqId:         reqId,
+                              Encode:        telemetryEncode,
+                              Subidstr:      subid,
+                              Qos:           marking}
+
+            go mdtSubscribe(configOperClient, &createSubsArgs)
+        }
+        select { }
      } else if strings.EqualFold(*operation, "get-proto") {
         if len(*yangPath) > 0 {
            getProtoArgs := MdtDialin.GetProtoFileArgs{ReqId: reqId, YangPath: *yangPath}
@@ -127,11 +151,25 @@ func main() {
 
 // createSubs rpc to subscribe
 func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateSubsArgs) {
-     fmt.Printf("mdtSubscribe: Dialin Reqid %d subscription %s\n", args.ReqId, args.Subscriptions)
+     fmt.Printf("mdtSubscribe: Dialin Reqid %d subscription %s\n", args.ReqId, args.Subidstr)
 
-     dataChan := make(chan *MdtDialin.CreateSubsReply, 10000)
+     dataChan := make(chan []byte, 10000)
+     //dataChan := make(chan *MdtDialin.CreateSubsReply, 10000)
      defer close(dataChan)
-     go mdtOutLoop(dataChan, args.Encode)
+     //go mdtOutLoop(dataChan, args.Encode)
+
+     o := &telemetry_decode.MdtOut{
+                        OutFile:     *outFile,
+                        Encoding:    *encoding,
+                        Decode_raw:  *decode_raw,
+                        DontClean:   *dontClean,
+                        ProtoFile:   *protoFile,
+                        PluginDir:   *pluginDir,
+                        PluginFile:  *pluginFile,
+                        DataChan:     dataChan,
+     }
+     // handler for decoding the data, reads data from dataChan
+     go o.MdtOutLoop()
 
      stream, err := client.CreateSubs(context.Background(), args)
      if err != nil {
@@ -154,7 +192,7 @@ func mdtSubscribe(client MdtDialin.GRPCConfigOperClient, args *MdtDialin.CreateS
                break
             }
          } else {
-            dataChan <- reply
+            dataChan <- reply.Data
          }
      }
 
