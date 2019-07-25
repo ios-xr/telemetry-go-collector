@@ -28,9 +28,16 @@ If git clone is used, change the import of mdt_grpc_dialout in telemetry_dialout
 
 #### Requirements
 Need following to be available to be able to build the collectors, binaries can be used as is on linux
-* go
-* protoc
-* grpc
+* go  
+  wget https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz  
+  tar xvfz go1.11.5.linux-amd64.tar.gz  
+* protoc  
+  wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.0rc2/protoc-3.7.0-rc-2-linux-x86_64.zip  
+  unzip protoc-3.7.0-rc-2-linux-x86_64.zip  
+* grpc  
+  go get -u google.golang.org/grpc  
+* elasticsearch  
+  go get github.com/elastic/go-elasticsearch  
 
 Install instructions are present in [Dialout-collector-howto.md](Dialout-collector-howto.md)
 
