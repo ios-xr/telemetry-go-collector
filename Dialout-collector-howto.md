@@ -16,7 +16,7 @@ Table of contents
       * [Install protobuf/protoc](#install-protoc)
       * [Install protoc-gen-go](#install-protoc-gen-go)
       * [Install grpc](#install-grpc-go)
-      * [Install elasticsearch go client](#install-elasticsearch)
+      * [Install elasticsearch go client](#install-elasticsearch-go-client)
    * [Get Telemtry Proto for Dialout Services](#get-telemtry-proto-for-dialout-services)
       * [Generate go binding]( #generate-the-go-binding-for-this-proto)
    * [Grpc Server Code](#grpc-server-code)
