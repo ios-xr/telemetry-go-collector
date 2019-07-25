@@ -16,6 +16,7 @@ Table of contents
       * [Install protobuf/protoc](#install-protoc)
       * [Install protoc-gen-go](#install-protoc-gen-go)
       * [Install grpc](#install-grpc-go)
+      * [Install elasticsearch go client](#install-elasticsearch)
    * [Get Telemtry Proto for Dialout Services](#get-telemtry-proto-for-dialout-services)
       * [Generate go binding]( #generate-the-go-binding-for-this-proto)
    * [Grpc Server Code](#grpc-server-code)
@@ -56,6 +57,10 @@ section.
 
 #### Install grpc go:
 `  $ go get -u google.golang.org/grpc`
+
+#### Install elasticsearch go client:
+   This is only needed if you want to push the data to elasticsearch  
+`  $ go get github.com/elastic/go-elasticsearch`
 
 Almost ready to write the collector, just make sure "go", "protoc" and
 "protoc-gen-go" are comming from place you intend them to be used from
