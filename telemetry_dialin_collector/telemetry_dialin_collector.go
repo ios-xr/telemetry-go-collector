@@ -1,6 +1,7 @@
 package main
 
 import (
+	TLS "crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ var usage = func() {
 	fmt.Fprintf(os.Stderr, "Subscribe                       : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Get proto for yang path         : %s -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Subscribe, using TLS            : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -cert <>\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Subscribe, using TLS(insecure)  : %s -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -skip_verify\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode : %s -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Subscribe, use protoc to decode without proto: %s %s -server <ip:port> -subscription <> -encoding gpb -decode_raw\n", os.Args[0])
 }
@@ -58,6 +60,7 @@ var (
 	pluginFile         = flag.String("plugin", "", "plugin file, used to lookup gpb symbol for decode")
 	dontClean          = flag.Bool("dont_clean", false, "Don't remove tmp files on exit")
 	certFile           = flag.String("cert", "", "TLS cert file")
+	skipVerify         = flag.Bool("skip_verify", false, "Use TLS but skip verification")
 	serverHostOverride = flag.String("server_host_override", "ems.cisco.com",
 		"The server name to verify the hostname returned during TLS handshake")
 )
@@ -89,6 +92,10 @@ func main() {
 		var tc credentials.TransportCredentials
 		tc, _ = credentials.NewClientTLSFromFile(*certFile, *serverHostOverride)
 		opts = append(opts, grpc.WithTransportCredentials(tc))
+	} else if *skipVerify {
+		// Use TLS but skip verification
+		cred := credentials.NewTLS(&TLS.Config{InsecureSkipVerify: true})
+		opts = append(opts, grpc.WithTransportCredentials(cred))
 	} else {
 		opts = append(opts, grpc.WithInsecure())
 	}
