@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 
+	mdt_dialout "github.com/ios-xr/telemetry-go-collector/mdt_grpc_dialout"
 	"github.com/ios-xr/telemetry-go-collector/telemetry_decode"
 )
 
