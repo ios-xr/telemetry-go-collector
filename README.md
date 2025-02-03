@@ -9,48 +9,66 @@ to push output to a DB. This is meant for beginners, if you are familiar with Go
 
 If you want to start from scratch or do not have "Go", Protoc, protoc-gen-go or grpc installed, you can check out [Dialout-collector-howto.md](Dialout-collector-howto.md). It has instructions on how to get started and how to write a simple collector.
 
+We stopped bundling prebuilt binary. Please build binary following the steps explained below.
+
 Assuming "Go" is already installed, following instructions are for getting collector, building it and running it.
 
-**Note:**  
-* Dialout collector supports GRPC, TCP and UDP transports  
-* Dialin Collector supports subscribe and get-proto RPCs to IOSXR device over GRPC as transport  
+**Note:**
+* Dialout collector supports GRPC, TCP and UDP transports
+* Dialin Collector supports subscribe and get-proto RPCs to IOSXR device over GRPC as transport
 * Decode logic in the collector including Compact GPB encoded messages is explained at [docs/Decode-Compact-GPB-Message](docs/Decode-Compact-GPB-Message.md)
 * Streamed messages can be pushed to elasticsearch using "-out elasticsearch:<ip>:<port>" option when collector is started
 
-#### Install instructions:
-`go get -d github.com/ios-xr/telemetry-go-collector`
-
-alternately, use git clone to get the collector to $GOPATH/src directory
-
-`git clone github.com/ios-xr/telemetry-go-collector $GOPATH/src`
-
-If git clone is used, change the import of mdt_grpc_dialout in telemetry_dialout_collector.go to make sure, path is correct relative to $GOPATH/src
-
 #### Requirements
-Need following to be available to be able to build the collectors, binaries can be used as is on linux
-* go  
-  wget https://dl.google.com/go/go1.11.5.linux-amd64.tar.gz  
-  tar xvfz go1.11.5.linux-amd64.tar.gz  
-* protoc  
-  wget https://github.com/protocolbuffers/protobuf/releases/download/v3.7.0rc2/protoc-3.7.0-rc-2-linux-x86_64.zip  
-  unzip protoc-3.7.0-rc-2-linux-x86_64.zip  
-* grpc  
-  go get -u google.golang.org/grpc  
-* elasticsearch  
-  go get github.com/elastic/go-elasticsearch  
+As mentioned above, the following instruction assumes Go environment.
+If you don't have it ready, please follow https://go.dev/doc/install
 
-Install instructions are present in [Dialout-collector-howto.md](Dialout-collector-howto.md)
+#### Install instructions:
+```
+git clone https://github.com/ios-xr/telemetry-go-collector.git
+
+cd telemetry-co-collector/telemetry_dialin_collector/
+go install
+
+<or>
+
+cd telemetry-co-collector/telemetry_dialout_collector/
+go install
+```
+
+#### Build instructions for dialin/dialout components:
+```
+git clone https://github.com/ios-xr/telemetry-go-collector.git
+
+cd telemetry_dialin_collector/
+go build
+<binary will be created in the same directory>
+
+OR
+
+cd telemetry_dialout_collector/
+go build
+<binary will be created in the same directory>
+```
 
 --------
 ### MDT Dialout Collector:
 ##### Build
-`go build -o bin/telemetry_dialout_collector github.com/ios-xr/telemetry-go-collector/telemetry_dialout_collector`
+```
+git clone https://github.com/ios-xr/telemetry-go-collector.git
 
-prebuilt binary can be used from bin/telemetry_dialout_collector on Linux.
+
+cd telemetry_dialout_collector/
+go build
+
+`telemetry_dialout_collector` will be found in the directory
+```
+
+Install instructions are present in [Dialout-collector-howto.md](Dialout-collector-howto.md)
 
 ##### Run
 ```
- $ ./bin/telemetry_dialout_collector -h
+$ $(PATH_TO_BIN)/telemetry_dialout_collector -h
 Usage: ./bin/telemetry_dialout_collector [options]
   -cert string
         TLS cert file
@@ -88,13 +106,15 @@ GRPC use protoc to decode without proto: ./bin/telemetry_dialout_collector -port
 --------------------
 ### MDT Dialin Collector:
 ##### Build
-`go build -o bin/telemetry_dialin_collector github.com/ios-xr/telemetry-go-collector/telemetry_dialin_collector`
+```
+git clone https://github.com/ios-xr/telemetry-go-collector.git
 
-prebuilt binary can be used from bin/telemetry_dialin_collector on Linux.
+cd telemetry_dialin_collector/
+go build
+<binary will be created in the same directory>
+```
 
 ##### Run
-```
- $ ./bin/telemetry_dialin_collector -h
 Usage: ./bin/telemetry_dialin_collector [options]
   -cert string
         TLS cert file
@@ -122,6 +142,8 @@ Usage: ./bin/telemetry_dialin_collector [options]
         The server address, host:port
   -server_host_override string
         The server name to verify the hostname returned during TLS handshake (default "ems.cisco.com")
+  -skip_verify
+        TLS without certificate (not recommended for production use)
   -subscription string
         Subscription name to subscribe to
   -username string
@@ -132,6 +154,7 @@ Examples:
 Subscribe                       : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <>
 Get proto for yang path         : ./bin/telemetry_dialin_collector -server <ip:port> -oper get-proto -yang <yang model or xpath> -out <filename> -username <> -password <>
 Subscribe, using TLS            : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -cert <>
+Subscribe, using TLS w/o cert   : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding self-describing-gpb -username <> -password <> -skip_verify
 Subscribe, use protoc to decode : ./bin/telemetry_dialin_collector -server <ip:port> -subscription <> -encoding gpb -username <> -password <> -proto cdp_neighbor.proto
 Subscribe, use protoc to decode without proto: ./bin/telemetry_dialin_collector %!s(MISSING) -server <ip:port> -subscription <> -encoding gpb -decode_raw
  $
